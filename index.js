@@ -2,8 +2,28 @@ const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 
+// Serve a simple form on the root URL
+app.get('/', (req, res) => {
+  res.send(`
+    <html>
+      <head>
+        <title>Proxy Server</title>
+      </head>
+      <body>
+        <h1>Enter URL to Proxy</h1>
+        <form method="GET" action="/proxy">
+          <label for="url">URL:</label>
+          <input type="text" id="url" name="url" placeholder="https://example.com" required>
+          <button type="submit">Proxy</button>
+        </form>
+      </body>
+    </html>
+  `);
+});
+
+// Proxy the request based on the entered URL
 app.use(
-  '/',
+  '/proxy',
   (req, res, next) => {
     const targetUrl = req.query.url;
 
@@ -46,7 +66,7 @@ app.use(
           }
         },
         pathRewrite: {
-          [`^/`]: '',
+          [`^/proxy`]: '',
         },
       })(req, res, next);
     } catch (error) {
