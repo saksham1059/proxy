@@ -13,22 +13,28 @@ app.use(
 
     try {
       const target = new URL(targetUrl);
-      createProxyMiddleware({
+      const proxy = createProxyMiddleware({
         target: target.origin,
         changeOrigin: true,
+        selfHandleResponse: true,  // Important: Handle the response manually to prevent auto-sending headers
         onProxyRes: (proxyRes, req, res) => {
-          // Handle only HTML responses to adjust paths if needed
+          // Handle only HTML responses
           if (proxyRes.headers['content-type'] && proxyRes.headers['content-type'].includes('text/html')) {
             let body = '';
-            proxyRes.on('data', chunk => body += chunk);
+            proxyRes.on('data', (chunk) => {
+              body += chunk;
+            });
             proxyRes.on('end', () => {
+              // Rewrite the paths for static resources
               body = body.replace(/(src|href)="\/(?!\/)/g, `$1="${target.origin}/`);
+              // Send the final response only if headers have not already been sent
               if (!res.headersSent) {
-                res.send(body);
+                res.writeHead(proxyRes.statusCode, proxyRes.headers);
+                res.end(body);
               }
             });
           } else {
-            // For other types of responses, let the proxy handle them directly
+            // Pipe other content types directly without altering
             res.writeHead(proxyRes.statusCode, proxyRes.headers);
             proxyRes.pipe(res);
           }
@@ -42,7 +48,9 @@ app.use(
         pathRewrite: {
           [`^/`]: '',
         },
-      })(req, res, next);
+      });
+
+      proxy(req, res, next);
     } catch (error) {
       console.error('URL error:', error);
       if (!res.headersSent) {
