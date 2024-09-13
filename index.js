@@ -16,11 +16,21 @@ app.use(
       createProxyMiddleware({
         target: target.origin,
         changeOrigin: true,
+        onProxyRes: (proxyRes, req, res) => {
+          // Fix the URL of JavaScript files and other assets if needed
+          if (proxyRes.headers['content-type'] && proxyRes.headers['content-type'].includes('text/html')) {
+            let body = '';
+            proxyRes.on('data', chunk => body += chunk);
+            proxyRes.on('end', () => {
+              body = body.replace(/(src|href)="\/(?!\/)/g, `$1="${target.origin}/`);
+              res.send(body);
+            });
+          } else {
+            res.send(proxyRes);
+          }
+        },
         pathRewrite: {
           [`^/`]: '',
-        },
-        onProxyReq: (proxyReq, req, res) => {
-          // Modify headers or request here if needed
         },
       })(req, res, next);
     } catch (error) {
