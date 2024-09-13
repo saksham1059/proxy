@@ -1,35 +1,61 @@
 const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const request = require('request');
+const dns = require('dns');
+const bodyParser = require('body-parser');
 
 const app = express();
+const port = 3000;
 
-app.use('/proxy', createProxyMiddleware({
-    target: 'https://example.com', // Replace with the actual site
-    changeOrigin: true,
-    secure: false,
-    onProxyRes(proxyRes, req, res) {
-        proxyRes.headers['X-Frame-Options'] = ''; // Adjust headers if needed
-    }
-}));
+// Serve HTML content directly
+const indexHtml = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Browser</title>
+</head>
+<body>
+    <h1>Simple Browser</h1>
+    <form action="/fetch" method="post">
+        <label for="url">Enter URL:</label>
+        <input type="text" id="url" name="url" placeholder="http://example.com" required>
+        <button type="submit">Go</button>
+    </form>
+</body>
+</html>
+`;
 
+// Serve the form
 app.get('/', (req, res) => {
-    res.send(`
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Embed Proxied Site</title>
-        </head>
-        <body>
-            <h1>Website Embedded via Proxy with Cloudflare DNS</h1>
-            <iframe src="/proxy" width="100%" height="800" style="border:none;"></iframe>
-        </body>
-        </html>
-    `);
+    res.send(indexHtml);
 });
 
-const port = process.env.PORT || 3000;
+// Handle form submission and proxy request
+app.post('/fetch', (req, res) => {
+    const url = req.body.url;
+
+    if (!url) {
+        return res.status(400).send('URL is required');
+    }
+
+    const parsedUrl = new URL(url, `http://${req.headers.host}`);
+    const domain = parsedUrl.hostname;
+
+    // Resolve DNS using Cloudflare's 1.1.1.1
+    dns.setServers(['1.1.1.1']);
+    dns.resolve4(domain, (err, addresses) => {
+        if (err) return res.status(500).send('DNS resolution failed');
+
+        const ip = addresses[0];
+        const targetUrl = `http://${ip}${parsedUrl.pathname}`;
+
+        request(targetUrl).on('error', (err) => {
+            res.status(500).send('Request failed');
+        }).pipe(res);
+    });
+});
+
 app.listen(port, () => {
-    console.log(`Proxy server listening on port ${port}`);
+    console.log(`Server running at http://localhost:${port}`);
 });
