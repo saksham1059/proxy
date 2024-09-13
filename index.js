@@ -17,16 +17,26 @@ app.use(
         target: target.origin,
         changeOrigin: true,
         onProxyRes: (proxyRes, req, res) => {
-          // Fix the URL of JavaScript files and other assets if needed
+          // Handle only HTML responses to adjust paths if needed
           if (proxyRes.headers['content-type'] && proxyRes.headers['content-type'].includes('text/html')) {
             let body = '';
             proxyRes.on('data', chunk => body += chunk);
             proxyRes.on('end', () => {
               body = body.replace(/(src|href)="\/(?!\/)/g, `$1="${target.origin}/`);
-              res.send(body);
+              if (!res.headersSent) {
+                res.send(body);
+              }
             });
           } else {
-            res.send(proxyRes);
+            // For other types of responses, let the proxy handle them directly
+            res.writeHead(proxyRes.statusCode, proxyRes.headers);
+            proxyRes.pipe(res);
+          }
+        },
+        onError: (err, req, res) => {
+          console.error('Proxy error:', err);
+          if (!res.headersSent) {
+            res.status(500).send('Proxy error');
           }
         },
         pathRewrite: {
@@ -34,7 +44,10 @@ app.use(
         },
       })(req, res, next);
     } catch (error) {
-      return res.status(400).send('Invalid `url` query parameter.');
+      console.error('URL error:', error);
+      if (!res.headersSent) {
+        return res.status(400).send('Invalid `url` query parameter.');
+      }
     }
   }
 );
