@@ -1,84 +1,45 @@
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const dns = require('dns');
+
+// Force DNS to use Cloudflare (1.1.1.1)
+dns.setServers(['1.1.1.1', '1.0.0.1']);
+
 const app = express();
 
-// Serve a simple form on the root URL
+// Proxy middleware to route requests to the target site
+app.use('/proxy', createProxyMiddleware({
+    target: 'https://autoembed.cc', // Replace with the site you want to proxy
+    changeOrigin: true,
+    secure: false,
+    onProxyRes(proxyRes, req, res) {
+        // Bypass X-Frame-Options to allow embedding (if needed)
+        proxyRes.headers['X-Frame-Options'] = '';
+    }
+}));
+
+// Root route to serve an HTML page that embeds the proxied site
 app.get('/', (req, res) => {
-  res.send(`
-    <html>
-      <head>
-        <title>Proxy Server</title>
-      </head>
-      <body>
-        <h1>Enter URL to Proxy</h1>
-        <form method="GET" action="/proxy">
-          <label for="url">URL:</label>
-          <input type="text" id="url" name="url" placeholder="https://example.com" required>
-          <button type="submit">Proxy</button>
-        </form>
-      </body>
-    </html>
-  `);
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Embed Proxied Site</title>
+        </head>
+        <body>
+            <h1>Website Embedded via Proxy with Cloudflare DNS</h1>
+            <iframe src="/proxy" width="100%" height="800" style="border:none;">
+                Your browser does not support iframes.
+            </iframe>
+        </body>
+        </html>
+    `);
 });
 
-// Proxy the request based on the entered URL
-app.use(
-  '/proxy',
-  (req, res, next) => {
-    const targetUrl = req.query.url;
-
-    if (!targetUrl) {
-      console.error('Missing `url` query parameter');
-      return res.status(400).send('Missing `url` query parameter.');
-    }
-
-    try {
-      const target = new URL(targetUrl);
-      console.log(`Proxying to target: ${target.origin}`);
-
-      createProxyMiddleware({
-        target: target.origin,
-        changeOrigin: true,
-        selfHandleResponse: true, // Handle the response manually
-        onProxyRes: (proxyRes, req, res) => {
-          let body = '';
-          proxyRes.on('data', (chunk) => {
-            body += chunk;
-          });
-
-          proxyRes.on('end', () => {
-            if (!res.headersSent) {
-              // For HTML responses, modify the content
-              if (proxyRes.headers['content-type'] && proxyRes.headers['content-type'].includes('text/html')) {
-                body = body.replace(/(src|href)="\/(?!\/)/g, `$1="${target.origin}/"`);
-              }
-
-              // Send headers and body
-              res.writeHead(proxyRes.statusCode, proxyRes.headers);
-              res.end(body);
-            }
-          });
-        },
-        onError: (err, req, res) => {
-          console.error('Proxy error:', err);
-          if (!res.headersSent) {
-            res.status(500).send('Proxy error occurred.');
-          }
-        },
-        pathRewrite: {
-          [`^/proxy`]: '',
-        },
-      })(req, res, next);
-    } catch (error) {
-      console.error('Invalid URL:', error);
-      if (!res.headersSent) {
-        return res.status(400).send('Invalid `url` query parameter.');
-      }
-    }
-  }
-);
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Proxy server running on port ${PORT}`);
+// Start the server
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+    console.log(`Proxy server listening on port ${port}`);
 });
