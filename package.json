@@ -1,17 +1,19 @@
 {
-  "name": "simple-browser",
+  "name": "proxy-server",
   "version": "1.0.0",
-  "description": "A simple Node.js browser that uses Cloudflare DNS and serves web pages.",
+  "description": "A simple proxy server to bypass blocked URLs.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "request": "^2.88.2",
-    "dns": "^0.1.1",
-    "body-parser": "^1.20.2"
+    "axios": "^1.5.0"
   },
+  "engines": {
+    "node": ">=20.x"
+  },
+  "keywords": [],
   "author": "",
   "license": "ISC"
 }
